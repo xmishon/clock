@@ -4,9 +4,10 @@ using System;
 using Extensions;
 using UnityEngine;
 using UnityEngine.UI;
-using clock;
+using UnityEngine.EventSystems;
+using Clock;
 
-public class Clock : MonoBehaviour
+public class ClockController : MonoBehaviour
 {
     public DateTime dateTime;
 
@@ -17,16 +18,35 @@ public class Clock : MonoBehaviour
     [SerializeField]
     private List<string> _ntpServers;
     [SerializeField]
-    private CanvasScaler _rootCanvasScaler;
+    private List<CanvasScaler> _rootCanvasScalers = new List<CanvasScaler>();
     [SerializeField]
     private double _updateIntervalInMinutes = 60.0d;
+    [SerializeField]
+    private GameObject _notification;
+    [SerializeField]
+    private AudioSource _audioSource;
 
     private int _hours;
     private int _minutes;
     private DateTime _lastUpdateTime;
+    private ClockFace _clockFace;
+
+    public void CallNotification()
+    {
+        AlarmManager.Instance.SetupAlarm(-1, -1);
+        _notification.SetActive(true);
+        _audioSource.Play();
+    }
+
+    public void CloseNotification()
+    {
+        _audioSource.Stop();
+        _notification.SetActive(false);
+    }
 
     private void Start()
     {
+        _clockFace = new ClockFace(_hourArrow, _minuteArrow);
         UpdateTimeFromNetwork();
         _lastUpdateTime = dateTime;
     }
@@ -34,11 +54,15 @@ public class Clock : MonoBehaviour
     private void Update()
     {
         TimeTick();
-        UpdateArrowPositions();
+        _clockFace.UpdateArrowPositions(_hours, _minutes);
         if (dateTime.Subtract(_lastUpdateTime) > TimeSpan.FromMinutes(_updateIntervalInMinutes))
         {
             UpdateTimeFromNetwork();
             _lastUpdateTime = dateTime;
+        }
+        if (AlarmManager.Instance.CheckAlarm(_hours, _minutes))
+        {
+            CallNotification();
         }
     }
 
@@ -49,21 +73,15 @@ public class Clock : MonoBehaviour
         _minutes = dateTime.Minute;
     }
 
-    private void UpdateArrowPositions()
-    {
-        float hourAngle = 360.0f / 12.0f * (_hours + _minutes / 60.0f);
-        float minutesAngle = _minutes / 60.0f * 360.0f;
-
-        _hourArrow.transform.rotation = Quaternion.Euler(0, 0, -hourAngle);
-        _minuteArrow.transform.rotation = Quaternion.Euler(0, 0, -minutesAngle);
-    }
-
     private void OnRectTransformDimensionsChange()
     {
         Debug.Log("Dimensions changed!");
         int height = Screen.height;
         int width = Screen.width;
-        _rootCanvasScaler.matchWidthOrHeight = width > height ? 1.0f : 0.0f;
+        foreach (CanvasScaler canvasScaler in _rootCanvasScalers)
+        {
+            canvasScaler.matchWidthOrHeight = width > height ? 1.0f : 0.0f;
+        }
     }
 
     private void UpdateTimeFromNetwork()
